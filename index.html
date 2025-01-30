@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>OP-Nachsorgeplan</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+      max-width: 600px;
+    }
+    h1 {
+      margin-bottom: 0.5em;
+    }
+    label {
+      font-weight: bold;
+    }
+    input[type="date"] {
+      padding: 6px;
+      font-size: 1em;
+      margin-left: 6px;
+    }
+    .results {
+      margin-top: 20px;
+    }
+    table {
+      border-collapse: collapse;
+      margin: 10px 0;
+      width: 100%;
+    }
+    th, td {
+      padding: 6px;
+      border: 1px solid #ccc;
+    }
+    th {
+      background: #f0f0f0;
+    }
+    button {
+      padding: 10px 15px;
+      font-size: 1em;
+      cursor: pointer;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>OP-Nachsorgeplan</h1>
+  <p>Bitte wähle das OP-Datum. Die Enddaten für Wochen 1–12 und Monate 1–12 werden automatisch berechnet.</p>
+
+  <div>
+    <label for="opDate">OP-Datum:</label>
+    <input type="date" id="opDate" value="">
+  </div>
+
+  <div class="results" id="results">
+    <!-- Hier wird das Ergebnis (Wochen + Monate) eingefügt -->
+  </div>
+
+  <button onclick="printAsPDF()">Als PDF exportieren</button>
+
+  <script>
+    // Wenn sich das Datum ändert, neu berechnen
+    document.getElementById('opDate').addEventListener('change', calculate);
+
+    // Hilfsfunktion, um ein Datum als TT.MM.JJJJ-String zu formatieren
+    function formatDate(date) {
+      if (!date) return "";
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}.${month}.${year}`;
+    }
+
+    function calculate() {
+      const dateInput = document.getElementById('opDate');
+      const opDateValue = dateInput.value; // z.B. "2025-01-01"
+
+      // Falls kein Datum gewählt ist, Ergebnis leeren
+      if (!opDateValue) {
+        document.getElementById('results').innerHTML = "";
+        return;
+      }
+
+      // In ein JavaScript-Date-Objekt umwandeln
+      const opDate = new Date(opDateValue);
+
+      // 1) Wochen 1–12 berechnen
+      const weeks = [];
+      for (let w = 1; w <= 12; w++) {
+        let newDate = new Date(opDate.getTime());
+        newDate.setDate(newDate.getDate() + (7 * w));
+        weeks.push({
+          label: `Woche ${w}`,
+          date: formatDate(newDate)
+        });
+      }
+
+      // 2) Monate 1–12 berechnen
+      const months = [];
+      for (let m = 1; m <= 12; m++) {
+        let newDate = new Date(opDate.getTime());
+        newDate.setMonth(newDate.getMonth() + m);
+        months.push({
+          label: `Monat ${m}`,
+          date: formatDate(newDate)
+        });
+      }
+
+      // Ergebnisse als HTML-Tabellen anzeigen
+      let html = "";
+
+      // Tabelle für Wochen
+      html += `<h2>Wochen</h2>`;
+      html += `<table>`;
+      html += `<tr><th>Woche</th><th>Enddatum</th></tr>`;
+      weeks.forEach(item => {
+        html += `<tr><td>${item.label}</td><td>${item.date}</td></tr>`;
+      });
+      html += `</table>`;
+
+      // Tabelle für Monate
+      html += `<h2>Monate</h2>`;
+      html += `<table>`;
+      html += `<tr><th>Monat</th><th>Datum (OP-Datum + x Monate)</th></tr>`;
+      months.forEach(item => {
+        html += `<tr><td>${item.label}</td><td>${item.date}</td></tr>`;
+      });
+      html += `</table>`;
+
+      document.getElementById('results').innerHTML = html;
+    }
+
+    // Button-Funktion zum Drucken (-> PDF auf iPad/Browser)
+    function printAsPDF() {
+      window.print();
+    }
+  </script>
+</body>
+</html>
