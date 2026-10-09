@@ -5,6 +5,9 @@
   <title>OP-Nachsorgeplan – Achilles Altona</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet" />
+  <!-- jsPDF: erzeugt die PDF selbst, weil window.print() in Homebildschirm-Web-Apps
+       unter iOS/iPadOS 26 nicht zuverlässig funktioniert -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <style>
     /* ── Reset & Base ── */
@@ -454,8 +457,136 @@
       results.classList.add('visible');
     }
 
-    function printAsPDF() {
-      window.print();
+    // ── PDF-Export ──
+    // Baut die PDF direkt im Browser und gibt sie über das Teilen-Menü aus
+    // (Drucken, In Dateien sichern, Mail). Fällt auf Download bzw. window.print() zurück.
+    const C = {
+      dunkelblau: [0, 65, 101],
+      hellblau:   [82, 198, 226],
+      gruengelb:  [214, 227, 66],
+      grauHell:   [244, 246, 248],
+      grauRand:   [220, 227, 232],
+      hlBlau:     [229, 246, 251],
+      hlGelb:     [243, 247, 198],
+    };
+
+    function readRows(tableId) {
+      return [...document.querySelectorAll(`#${tableId} tbody tr`)].map(tr => ({
+        cells: [...tr.cells].map(td => td.textContent),
+        hl: tr.classList.contains('highlight-blau') ? 'blau'
+          : tr.classList.contains('highlight-gelb') ? 'gelb' : null,
+      }));
+    }
+
+    function drawTable(doc, x, y, w, title, pillColor, head, rows) {
+      // Pill
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      const pillW = doc.getTextWidth(title) + 8;
+      doc.setFillColor(...pillColor);
+      doc.roundedRect(x, y, pillW, 6, 3, 3, 'F');
+      doc.setTextColor(...C.dunkelblau);
+      doc.text(title, x + 4, y + 4.1);
+      doc.setDrawColor(...C.grauRand);
+      doc.setLineWidth(0.2);
+      doc.line(x + pillW + 3, y + 3, x + w, y + 3);
+      y += 10;
+
+      const rowH = 7.5, col2 = x + w * 0.45;
+      // Kopfzeile
+      doc.setFillColor(...C.dunkelblau);
+      doc.rect(x, y, w, rowH, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+      doc.text(head[0].toUpperCase(), x + 4, y + 5);
+      doc.text(head[1].toUpperCase(), col2, y + 5);
+      y += rowH;
+
+      // Zeilen
+      doc.setFontSize(9.5);
+      rows.forEach((r, i) => {
+        const fill = r.hl === 'blau' ? C.hlBlau
+                   : r.hl === 'gelb' ? C.hlGelb
+                   : (i % 2 === 1 ? C.grauHell : null);
+        if (fill) { doc.setFillColor(...fill); doc.rect(x, y, w, rowH, 'F'); }
+        doc.setFont('helvetica', r.hl ? 'bold' : 'normal');
+        doc.setTextColor(...C.dunkelblau);
+        doc.text(r.cells[0], x + 4, y + 5);
+        doc.text(r.cells[1], col2, y + 5);
+        if (i < rows.length - 1) {
+          doc.setDrawColor(...C.grauRand);
+          doc.line(x, y + rowH, x + w, y + rowH);
+        }
+        y += rowH;
+      });
+    }
+
+    function buildPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+      const M = 18, W = 210 - 2 * M;
+
+      // Header
+      doc.setFillColor(...C.dunkelblau);
+      doc.rect(M, M, W, 20, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(15);
+      doc.setTextColor(255, 255, 255);
+      doc.text('OP-Nachsorgeplan', M + 7, M + 9.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...C.hellblau);
+      doc.text('Achilles Altona – Sportphysiotherapie', M + 7, M + 15);
+
+      // OP-Datum
+      let y = M + 28;
+      const opText = document.getElementById('opBadgeText').textContent;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      const badgeW = doc.getTextWidth(opText) + 16;
+      doc.setFillColor(...C.dunkelblau);
+      doc.roundedRect(M, y, badgeW, 9, 2, 2, 'F');
+      doc.setFillColor(...C.gruengelb);
+      doc.circle(M + 5, y + 4.5, 1.2, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.text(opText, M + 9, y + 6.1);
+
+      // Tabellen
+      y += 17;
+      const colW = (W - 8) / 2;
+      drawTable(doc, M, y, colW, 'WOCHEN', C.hellblau, ['Woche', 'Datum'], readRows('tableWochen'));
+      drawTable(doc, M + colW + 8, y, colW, 'MONATE', C.gruengelb, ['Monat', 'Datum'], readRows('tableMonate'));
+
+      return doc;
+    }
+
+    async function printAsPDF() {
+      if (!window.jspdf) { window.print(); return; }   // Bibliothek nicht geladen (offline)
+
+      const doc = buildPDF();
+      const opDate = document.getElementById('opBadgeText').textContent.replace('OP-Datum: ', '');
+      const fileName = `OP-Nachsorgeplan_${opDate}.pdf`;
+      const blob = doc.output('blob');
+      const file = new File([blob], fileName, { type: 'application/pdf' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: 'OP-Nachsorgeplan' });
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;          // Nutzer hat abgebrochen
+        }
+      }
+
+      // Fallback: Download (Desktop) bzw. PDF in neuem Tab
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
   </script>
 </body>
